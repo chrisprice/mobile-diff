@@ -737,10 +737,34 @@
                 let target = changeIdx;
                 if (target < 0) target = 0;
                 if (target >= changes.length) target = changes.length - 1;
-                
+
                 setCurrentChangeIndex(target);
                 const lineIndex = changes[target];
-                const el = document.getElementById(`diff-line-${lineIndex}`);
+
+                // In annotated mode, removed lines are not rendered, so we need to find
+                // the next visible change if the current one is a pure removal
+                let elementId = `diff-line-${lineIndex}`;
+                let el = document.getElementById(elementId);
+
+                if (!el && viewMode === 'annotated') {
+                    // Try to find the next visible change in the direction we're moving
+                    const direction = changeIdx > currentChangeIndex ? 1 : -1;
+                    let searchIdx = target;
+
+                    while (!el && searchIdx >= 0 && searchIdx < changes.length) {
+                        searchIdx += direction;
+                        if (searchIdx < 0 || searchIdx >= changes.length) break;
+
+                        const searchLineIdx = changes[searchIdx];
+                        const searchEl = document.getElementById(`diff-line-${searchLineIdx}`);
+                        if (searchEl) {
+                            el = searchEl;
+                            setCurrentChangeIndex(searchIdx);
+                            break;
+                        }
+                    }
+                }
+
                 if (el) {
                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
