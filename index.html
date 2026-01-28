@@ -1105,10 +1105,11 @@
                                                     <div className="bg-red-900/30 border-y border-red-900/50 my-1">
                                                         {deleted.map((d, di) => (
                                                             <div key={di} className="flex opacity-80">
-                                                                <div className="w-10 px-2 text-[10px] text-red-400 font-mono select-none">{d.oldLine}</div>
+                                                                <div className="w-10 shrink-0 text-right pr-3 text-[10px] text-red-400 font-mono select-none">{d.oldLine}</div>
                                                                 <div className="flex-1 px-3 font-mono text-[13px] text-red-200 line-through decoration-red-500/50">
                                                                     <DiffText text={d.text} charDiff={d.charDiff} isAdd={false} />
                                                                 </div>
+                                                                <div className="w-6 shrink-0"></div>
                                                             </div>
                                                         ))}
                                                     </div>
