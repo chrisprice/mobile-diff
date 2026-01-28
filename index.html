@@ -123,10 +123,10 @@
          */
         const computeDiff = (oldText = "", newText = "") => {
             if (!oldText && !newText) return [];
-            
+
             const lines1 = oldText.split('\n');
             const lines2 = newText.split('\n');
-            
+
             if (lines1.length > 2000 || lines2.length > 2000) {
                 return [{ type: 'equal', text: 'File too large to diff in browser.', oldLine: 1, newLine: 1 }];
             }
@@ -145,7 +145,7 @@
 
             const result = [];
             let i = lines1.length, j = lines2.length;
-            
+
             while (i > 0 || j > 0) {
                 if (i > 0 && j > 0 && lines1[i - 1] === lines2[j - 1]) {
                     result.unshift({ type: 'equal', text: lines1[i - 1], oldLine: i, newLine: j });
@@ -158,7 +158,49 @@
                     i--;
                 }
             }
+
+            // Post-process to detect adjacent remove/add pairs and compute character-level diffs
+            for (let k = 0; k < result.length - 1; k++) {
+                const current = result[k];
+                const next = result[k + 1];
+
+                // Check if we have a remove followed by an add (line modification)
+                if (current.type === 'remove' && next.type === 'add') {
+                    const oldLine = current.text;
+                    const newLine = next.text;
+
+                    // Only compute char diff if lines are somewhat similar (not completely different)
+                    // and not too long (performance)
+                    if (oldLine.length < 500 && newLine.length < 500) {
+                        const similarity = computeSimilarity(oldLine, newLine);
+                        if (similarity > 0.3) {
+                            const charDiff = computeCharDiff(oldLine, newLine);
+                            if (charDiff) {
+                                current.charDiff = charDiff;
+                                next.charDiff = charDiff;
+                            }
+                        }
+                    }
+                }
+            }
+
             return result;
+        };
+
+        // Helper to compute similarity ratio between two strings
+        const computeSimilarity = (str1, str2) => {
+            const len1 = str1.length;
+            const len2 = str2.length;
+            if (len1 === 0 || len2 === 0) return 0;
+
+            const maxLen = Math.max(len1, len2);
+            let matches = 0;
+
+            for (let i = 0; i < Math.min(len1, len2); i++) {
+                if (str1[i] === str2[i]) matches++;
+            }
+
+            return matches / maxLen;
         };
 
         const SyntaxText = ({ text }) => {
@@ -172,6 +214,86 @@
                     if (/^(\/\/.*)$/.test(part)) return <span key={i} className="text-slate-500">{part}</span>;
                     if (/^(div|span|className|style)$/.test(part)) return <span key={i} className="text-blue-400">{part}</span>;
                     return <span key={i}>{part}</span>;
+                })}
+                </React.Fragment>
+            );
+        };
+
+        // Character-level diff algorithm using Myers/LCS
+        const computeCharDiff = (oldText = "", newText = "") => {
+            if (!oldText || !newText) return null;
+
+            // Use a simple character-level LCS to find common subsequences
+            const m = oldText.length;
+            const n = newText.length;
+
+            // Build LCS matrix
+            const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+            for (let i = 1; i <= m; i++) {
+                for (let j = 1; j <= n; j++) {
+                    if (oldText[i - 1] === newText[j - 1]) {
+                        dp[i][j] = dp[i - 1][j - 1] + 1;
+                    } else {
+                        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+                    }
+                }
+            }
+
+            // Backtrack to build segments
+            const oldSegments = [];
+            const newSegments = [];
+            let i = m, j = n;
+            let oldBuf = '', newBuf = '';
+
+            while (i > 0 || j > 0) {
+                if (i > 0 && j > 0 && oldText[i - 1] === newText[j - 1]) {
+                    // Common character
+                    if (oldBuf) { oldSegments.unshift({ type: 'change', text: oldBuf }); oldBuf = ''; }
+                    if (newBuf) { newSegments.unshift({ type: 'change', text: newBuf }); newBuf = ''; }
+                    oldSegments.unshift({ type: 'equal', text: oldText[i - 1] });
+                    newSegments.unshift({ type: 'equal', text: newText[j - 1] });
+                    i--; j--;
+                } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+                    // Addition in new text
+                    newBuf = newText[j - 1] + newBuf;
+                    j--;
+                } else {
+                    // Deletion from old text
+                    oldBuf = oldText[i - 1] + oldBuf;
+                    i--;
+                }
+            }
+
+            if (oldBuf) oldSegments.unshift({ type: 'change', text: oldBuf });
+            if (newBuf) newSegments.unshift({ type: 'change', text: newBuf });
+
+            return { oldSegments, newSegments };
+        };
+
+        const DiffText = ({ text, charDiff, isAdd }) => {
+            if (!text) return null;
+
+            // If no character diff provided, fall back to syntax highlighting
+            if (!charDiff) {
+                return <SyntaxText text={text} />;
+            }
+
+            const segments = isAdd ? charDiff.newSegments : charDiff.oldSegments;
+
+            return (
+                <React.Fragment>
+                {segments.map((seg, i) => {
+                    if (seg.type === 'change') {
+                        return (
+                            <span
+                                key={i}
+                                className={isAdd ? 'bg-green-500/40 text-green-100' : 'bg-red-500/40 text-red-100'}
+                            >
+                                {seg.text}
+                            </span>
+                        );
+                    }
+                    return <span key={i}>{seg.text}</span>;
                 })}
                 </React.Fragment>
             );
@@ -737,10 +859,34 @@
                 let target = changeIdx;
                 if (target < 0) target = 0;
                 if (target >= changes.length) target = changes.length - 1;
-                
+
                 setCurrentChangeIndex(target);
                 const lineIndex = changes[target];
-                const el = document.getElementById(`diff-line-${lineIndex}`);
+
+                // In annotated mode, removed lines are not rendered, so we need to find
+                // the next visible change if the current one is a pure removal
+                let elementId = `diff-line-${lineIndex}`;
+                let el = document.getElementById(elementId);
+
+                if (!el && viewMode === 'annotated') {
+                    // Try to find the next visible change in the direction we're moving
+                    const direction = changeIdx > currentChangeIndex ? 1 : -1;
+                    let searchIdx = target;
+
+                    while (!el && searchIdx >= 0 && searchIdx < changes.length) {
+                        searchIdx += direction;
+                        if (searchIdx < 0 || searchIdx >= changes.length) break;
+
+                        const searchLineIdx = changes[searchIdx];
+                        const searchEl = document.getElementById(`diff-line-${searchLineIdx}`);
+                        if (searchEl) {
+                            el = searchEl;
+                            setCurrentChangeIndex(searchIdx);
+                            break;
+                        }
+                    }
+                }
+
                 if (el) {
                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
@@ -939,7 +1085,7 @@
                                                 )}
                                                 <div className={`flex-1 px-2 font-mono text-[13px] leading-5 py-0.5 ${wrapLines ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'}`}>
                                                     <span className="select-none inline-block w-4 opacity-50">{isAdd ? '+' : isRem ? '-' : ''}</span>
-                                                    <SyntaxText text={chunk.text} />
+                                                    <DiffText text={chunk.text} charDiff={chunk.charDiff} isAdd={isAdd} />
                                                 </div>
                                             </div>
                                         );
@@ -947,10 +1093,10 @@
                                     
                                     {viewMode === 'annotated' && diffData.map((chunk, idx) => {
                                         if (chunk.type === 'remove') return null;
-                                        
+
                                         const isAdd = chunk.type === 'add';
                                         const isExpanded = expandedDiffIdx === idx;
-                                        
+
                                         let originalContent = null;
                                         if (isExpanded) {
                                             const deleted = getOriginalContent(idx);
@@ -961,7 +1107,7 @@
                                                             <div key={di} className="flex opacity-80">
                                                                 <div className="w-10 px-2 text-[10px] text-red-400 font-mono select-none">{d.oldLine}</div>
                                                                 <div className="flex-1 px-3 font-mono text-[13px] text-red-200 line-through decoration-red-500/50">
-                                                                    {d.text}
+                                                                    <DiffText text={d.text} charDiff={d.charDiff} isAdd={false} />
                                                                 </div>
                                                             </div>
                                                         ))}
@@ -975,7 +1121,7 @@
                                         return (
                                             <div key={idx} id={`diff-line-${idx}`} className="flex flex-col">
                                                 {originalContent}
-                                                <div 
+                                                <div
                                                     onClick={() => {
                                                         if (isAdd) setExpandedDiffIdx(isExpanded ? null : idx);
                                                     }}
@@ -983,7 +1129,7 @@
                                                 >
                                                     {showLineNumbers && <div className={`w-10 shrink-0 text-right pr-3 text-[10px] py-0.5 text-slate-600 border-r border-slate-800 ${isAdd ? 'text-green-600 font-bold' : ''}`}>{chunk.newLine}</div>}
                                                     <div className={`flex-1 px-3 font-mono text-[13px] leading-5 py-0.5 ${wrapLines ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'}`}>
-                                                        <SyntaxText text={chunk.text} />
+                                                        <DiffText text={chunk.text} charDiff={chunk.charDiff} isAdd={isAdd} />
                                                     </div>
                                                     {isAdd && (
                                                         <div className="w-6 shrink-0 flex items-center justify-center text-green-500">
