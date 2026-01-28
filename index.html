@@ -4,7 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>GitHub Mobile Diff Viewer</title>
-    
+
+    <!-- PWA Configuration -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#020617">
+
+    <!-- iOS Home Screen Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Diff Viewer">
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -1105,10 +1114,11 @@
                                                     <div className="bg-red-900/30 border-y border-red-900/50 my-1">
                                                         {deleted.map((d, di) => (
                                                             <div key={di} className="flex opacity-80">
-                                                                <div className="w-10 px-2 text-[10px] text-red-400 font-mono select-none">{d.oldLine}</div>
+                                                                {showLineNumbers && <div className="w-10 shrink-0 text-right pr-3 text-[10px] text-red-400 font-mono select-none border-r border-slate-800">{d.oldLine}</div>}
                                                                 <div className="flex-1 px-3 font-mono text-[13px] text-red-200 line-through decoration-red-500/50">
                                                                     <DiffText text={d.text} charDiff={d.charDiff} isAdd={false} />
                                                                 </div>
+                                                                <div className="w-6 shrink-0"></div>
                                                             </div>
                                                         ))}
                                                     </div>
