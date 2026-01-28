@@ -2,7 +2,7 @@
   "name": "GitHub Mobile Diff Viewer",
   "short_name": "Diff Viewer",
   "description": "Mobile-optimized GitHub diff viewer with character-level highlighting",
-  "start_url": "/",
+  "start_url": "/mobile-diff",
   "display": "standalone",
   "background_color": "#020617",
   "theme_color": "#020617",
