@@ -524,7 +524,6 @@
 
             // --- REFS ---
             const scrollRef = useRef(null);
-            const scrollRatioRef = useRef(0);
             const firstLoadRef = useRef(true);
 
             // --- PERSISTENCE & RESTORE ---
@@ -869,33 +868,32 @@
                 if (target < 0) target = 0;
                 if (target >= changes.length) target = changes.length - 1;
 
-                setCurrentChangeIndex(target);
                 const lineIndex = changes[target];
 
                 // In annotated mode, removed lines are not rendered, so we need to find
                 // the next visible change if the current one is a pure removal
                 let elementId = `diff-line-${lineIndex}`;
                 let el = document.getElementById(elementId);
+                let finalIndex = target;
 
                 if (!el && viewMode === 'annotated') {
                     // Try to find the next visible change in the direction we're moving
-                    const direction = changeIdx > currentChangeIndex ? 1 : -1;
-                    let searchIdx = target;
+                    const direction = target > currentChangeIndex ? 1 : -1;
+                    let searchIdx = target + direction;
 
                     while (!el && searchIdx >= 0 && searchIdx < changes.length) {
-                        searchIdx += direction;
-                        if (searchIdx < 0 || searchIdx >= changes.length) break;
-
                         const searchLineIdx = changes[searchIdx];
                         const searchEl = document.getElementById(`diff-line-${searchLineIdx}`);
                         if (searchEl) {
                             el = searchEl;
-                            setCurrentChangeIndex(searchIdx);
+                            finalIndex = searchIdx;
                             break;
                         }
+                        searchIdx += direction;
                     }
                 }
 
+                setCurrentChangeIndex(finalIndex);
                 if (el) {
                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
@@ -912,17 +910,15 @@
             // --- VIEW HELPERS ---
 
             const handleSetViewMode = (newMode) => {
-                if (scrollRef.current) {
-                    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-                    scrollRatioRef.current = scrollHeight > clientHeight ? scrollTop / (scrollHeight - clientHeight) : 0;
-                }
                 setViewMode(newMode);
             };
 
             useLayoutEffect(() => {
-                if (scrollRef.current && scrollRatioRef.current > 0) {
-                    const { scrollHeight, clientHeight } = scrollRef.current;
-                    scrollRef.current.scrollTop = scrollRatioRef.current * (scrollHeight - clientHeight);
+                // After mode switch or file load, jump to current hunk if we have one
+                if (!fileLoading && currentChangeIndex >= 0 && changes.length > 0) {
+                    setTimeout(() => {
+                        jumpToChange(currentChangeIndex);
+                    }, 50);
                 }
             }, [viewMode, fileLoading]);
 
