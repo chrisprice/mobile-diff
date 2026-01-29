@@ -279,7 +279,7 @@
             return { oldSegments, newSegments };
         };
 
-        const DiffText = ({ text, charDiff, isAdd }) => {
+        const DiffText = ({ text, charDiff, isAdd, isEdit }) => {
             if (!text) return null;
 
             // If no character diff provided, fall back to syntax highlighting
@@ -293,11 +293,18 @@
                 <React.Fragment>
                 {segments.map((seg, i) => {
                     if (seg.type === 'change') {
+                        // Use yellow for edits, green for pure additions, red for deletions
+                        let colorClass;
+                        if (isEdit) {
+                            colorClass = 'bg-yellow-500/40 text-yellow-100';
+                        } else if (isAdd) {
+                            colorClass = 'bg-green-500/40 text-green-100';
+                        } else {
+                            colorClass = 'bg-red-500/40 text-red-100';
+                        }
+
                         return (
-                            <span
-                                key={i}
-                                className={isAdd ? 'bg-green-500/40 text-green-100' : 'bg-red-500/40 text-red-100'}
-                            >
+                            <span key={i} className={colorClass}>
                                 {seg.text}
                             </span>
                         );
@@ -1075,8 +1082,13 @@
                                     {viewMode === 'diff' && diffData.map((chunk, idx) => {
                                         const isAdd = chunk.type === 'add';
                                         const isRem = chunk.type === 'remove';
+                                        const isEdit = (isAdd || isRem) && chunk.charDiff; // Edit if part of a modification pair
+                                        const isPureAdd = isAdd && !chunk.charDiff; // Pure addition if add without charDiff
+
                                         let lineClass = "flex border-l-[3px] hover:bg-opacity-10 ";
-                                        if (isAdd) lineClass += "bg-green-900/20 border-green-500";
+                                        if (isPureAdd) lineClass += "bg-green-900/20 border-green-500";
+                                        else if (isEdit && isAdd) lineClass += "bg-yellow-900/20 border-yellow-500";
+                                        else if (isEdit && isRem) lineClass += "bg-yellow-900/20 border-yellow-600";
                                         else if (isRem) lineClass += "bg-red-900/20 border-red-500";
                                         else lineClass += "border-transparent hover:bg-slate-800";
 
@@ -1090,7 +1102,7 @@
                                                 )}
                                                 <div className={`flex-1 px-2 font-mono text-[13px] leading-5 py-0.5 ${wrapLines ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'}`}>
                                                     <span className="select-none inline-block w-4 opacity-50">{isAdd ? '+' : isRem ? '-' : ''}</span>
-                                                    <DiffText text={chunk.text} charDiff={chunk.charDiff} isAdd={isAdd} />
+                                                    <DiffText text={chunk.text} charDiff={chunk.charDiff} isAdd={isAdd} isEdit={isEdit} />
                                                 </div>
                                             </div>
                                         );
@@ -1100,6 +1112,8 @@
                                         if (chunk.type === 'remove') return null;
 
                                         const isAdd = chunk.type === 'add';
+                                        const isEdit = isAdd && chunk.charDiff; // Edit if add with charDiff
+                                        const isPureAdd = isAdd && !chunk.charDiff; // Pure addition if add without charDiff
                                         const isExpanded = expandedDiffIdx === idx;
 
                                         let originalContent = null;
@@ -1107,12 +1121,12 @@
                                             const deleted = getOriginalContent(idx);
                                             if (deleted.length > 0) {
                                                 originalContent = (
-                                                    <div className="bg-red-900/30 border-y border-red-900/50 my-1">
+                                                    <div className="bg-yellow-900/30 border-y border-yellow-900/50 my-1">
                                                         {deleted.map((d, di) => (
                                                             <div key={di} className="flex opacity-80">
-                                                                {showLineNumbers && <div className="w-10 shrink-0 text-right pr-3 text-[10px] text-red-400 font-mono select-none border-r border-slate-800">{d.oldLine}</div>}
-                                                                <div className="flex-1 px-3 font-mono text-[13px] text-red-200 line-through decoration-red-500/50">
-                                                                    <DiffText text={d.text} charDiff={d.charDiff} isAdd={false} />
+                                                                {showLineNumbers && <div className="w-10 shrink-0 text-right pr-3 text-[10px] text-yellow-400 font-mono select-none border-r border-slate-800">{d.oldLine}</div>}
+                                                                <div className="flex-1 px-3 font-mono text-[13px] text-yellow-200 line-through decoration-yellow-500/50">
+                                                                    <DiffText text={d.text} charDiff={d.charDiff} isAdd={false} isEdit={true} />
                                                                 </div>
                                                                 <div className="w-6 shrink-0"></div>
                                                             </div>
@@ -1124,6 +1138,11 @@
                                             }
                                         }
 
+                                        // Color scheme: green for pure additions, yellow for edits
+                                        const bgClass = isPureAdd ? 'bg-green-500/10 active:bg-green-500/20 border-green-500' : isEdit ? 'bg-yellow-500/10 active:bg-yellow-500/20 border-yellow-500' : 'border-transparent';
+                                        const numberColor = isPureAdd ? 'text-green-600' : isEdit ? 'text-yellow-600' : '';
+                                        const indicatorColor = isPureAdd ? 'text-green-500 bg-green-500' : isEdit ? 'text-yellow-500 bg-yellow-500' : '';
+
                                         return (
                                             <div key={idx} id={`diff-line-${idx}`} className="flex flex-col">
                                                 {originalContent}
@@ -1131,15 +1150,15 @@
                                                     onClick={() => {
                                                         if (isAdd) setExpandedDiffIdx(isExpanded ? null : idx);
                                                     }}
-                                                    className={`flex border-l-[3px] ${isAdd ? 'bg-green-500/10 cursor-pointer active:bg-green-500/20 border-green-500' : 'border-transparent'} hover:bg-slate-800 transition-colors`}
+                                                    className={`flex border-l-[3px] ${isAdd ? `${bgClass} cursor-pointer` : 'border-transparent'} hover:bg-slate-800 transition-colors`}
                                                 >
-                                                    {showLineNumbers && <div className={`w-10 shrink-0 text-right pr-3 text-[10px] py-0.5 text-slate-600 border-r border-slate-800 ${isAdd ? 'text-green-600 font-bold' : ''}`}>{chunk.newLine}</div>}
+                                                    {showLineNumbers && <div className={`w-10 shrink-0 text-right pr-3 text-[10px] py-0.5 text-slate-600 border-r border-slate-800 ${isAdd ? `${numberColor} font-bold` : ''}`}>{chunk.newLine}</div>}
                                                     <div className={`flex-1 px-3 font-mono text-[13px] leading-5 py-0.5 ${wrapLines ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'}`}>
-                                                        <DiffText text={chunk.text} charDiff={chunk.charDiff} isAdd={isAdd} />
+                                                        <DiffText text={chunk.text} charDiff={chunk.charDiff} isAdd={isAdd} isEdit={isEdit} />
                                                     </div>
                                                     {isAdd && (
-                                                        <div className="w-6 shrink-0 flex items-center justify-center text-green-500">
-                                                            {isExpanded ? <RotateCcw size={12} /> : <div className="w-1 bg-green-500 h-full" />}
+                                                        <div className={`w-6 shrink-0 flex items-center justify-center ${indicatorColor}`}>
+                                                            {isExpanded ? <RotateCcw size={12} /> : <div className={`w-1 h-full`} />}
                                                         </div>
                                                     )}
                                                 </div>
