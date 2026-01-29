@@ -833,6 +833,7 @@
                         }
                     }
                     setExpandedDiffIdx(null);
+                    firstLoadRef.current = true; // Reset to enable auto-jump on file change
                 }
             }, [selectedIndex]);
 
